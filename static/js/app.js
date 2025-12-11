@@ -5,11 +5,25 @@ let focusTimer = null;
 let timerInterval = null;
 let timerStartTime = null;
 let currentTimerTaskId = null;
+let topTimerRunning = false;
+let topTimerStartTimestamp = null;
+let topTimerPausedDuration = 0;
+let topTimerPauseStartTime = null;
+let topTimerInterval = null;
+let currentChartStyle = 'bar';
+let chartInstances = {};
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
-    loadTasks();
-    initSortable();
+    try {
+        loadTasks();
+        // 延迟初始化排序，确保任务列表已渲染
+        setTimeout(() => {
+            initSortable();
+        }, 100);
+    } catch (error) {
+        console.error('初始化错误:', error);
+    }
 });
 
 // 加载任务列表
@@ -32,15 +46,26 @@ async function loadTasks() {
 // 渲染任务列表
 function renderTasks() {
     const tasksList = document.getElementById('tasksList');
-    const statusFilter = document.getElementById('filterStatus').value;
-    const priorityFilter = document.getElementById('filterPriority').value;
-    const categoryFilter = document.getElementById('filterCategory').value;
+    if (!tasksList) return;
+    
+    const statusFilterEl = document.getElementById('filterStatus');
+    const priorityFilterEl = document.getElementById('filterPriority');
+    const tagsFilterEl = document.getElementById('filterTags');
+    
+    const statusFilter = statusFilterEl ? statusFilterEl.value : 'all';
+    const priorityFilter = priorityFilterEl ? priorityFilterEl.value : 'all';
     
     // 过滤任务
+    const tagsFilter = tagsFilterEl ? tagsFilterEl.value.trim().toLowerCase() : '';
     let filteredTasks = tasks.filter(task => {
         if (statusFilter !== 'all' && task.status !== statusFilter) return false;
         if (priorityFilter !== 'all' && task.priority != priorityFilter) return false;
-        if (categoryFilter !== 'all' && task.category !== categoryFilter) return false;
+        if (tagsFilter) {
+            const taskTags = (task.tags || '').toLowerCase();
+            const filterTags = tagsFilter.split(',').map(t => t.trim());
+            const hasMatchingTag = filterTags.some(tag => taskTags.includes(tag));
+            if (!hasMatchingTag) return false;
+        }
         return true;
     });
     
@@ -60,7 +85,7 @@ function renderTasks() {
                 ${task.description ? `<div class="task-description">${escapeHtml(task.description)}</div>` : ''}
                 <div class="task-meta">
                     <span class="task-badge badge-priority">${getPriorityText(task.priority)}</span>
-                    <span class="task-badge badge-category">${getCategoryText(task.category)}</span>
+                    ${task.tags ? task.tags.split(',').map(tag => `<span class="task-badge badge-tag">${escapeHtml(tag.trim())}</span>`).join('') : ''}
                     <span>创建: ${formatDate(task.created_at)}</span>
                 </div>
             </div>
@@ -124,30 +149,63 @@ async function reorderTasks(taskIds) {
 
 // 过滤任务
 function filterTasks() {
-    renderTasks();
+    try {
+        renderTasks();
+    } catch (error) {
+        console.error('过滤任务时出错:', error);
+        // 如果出错，至少尝试重新加载任务列表
+        loadTasks();
+    }
 }
 
 // 显示添加任务模态框
 function showAddTaskModal() {
-    document.getElementById('addTaskModal').style.display = 'block';
-    document.getElementById('taskTitle').focus();
+    const modal = document.getElementById('addTaskModal');
+    const titleInput = document.getElementById('taskTitle');
+    
+    if (!modal) {
+        alert('添加任务表单未找到，请刷新页面重试');
+        return;
+    }
+    
+    modal.style.display = 'block';
+    if (titleInput) {
+        titleInput.focus();
+    }
 }
 
 // 关闭添加任务模态框
 function closeAddTaskModal() {
-    document.getElementById('addTaskModal').style.display = 'none';
-    document.getElementById('addTaskForm').reset();
+    const modal = document.getElementById('addTaskModal');
+    const form = document.getElementById('addTaskForm');
+    
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    if (form) {
+        form.reset();
+    }
 }
 
 // 创建任务
 async function createTask(event) {
     event.preventDefault();
     
+    const titleEl = document.getElementById('taskTitle');
+    const descriptionEl = document.getElementById('taskDescription');
+    const priorityEl = document.getElementById('taskPriority');
+    const tagsEl = document.getElementById('taskTags');
+    
+    if (!titleEl || !priorityEl) {
+        alert('表单元素未找到，请刷新页面重试');
+        return;
+    }
+    
     const taskData = {
-        title: document.getElementById('taskTitle').value.trim(),
-        description: document.getElementById('taskDescription').value.trim(),
-        priority: parseInt(document.getElementById('taskPriority').value),
-        category: document.getElementById('taskCategory').value
+        title: titleEl.value.trim(),
+        description: descriptionEl ? descriptionEl.value.trim() : '',
+        priority: parseInt(priorityEl.value) || 1,
+        tags: tagsEl ? tagsEl.value.trim() : ''
     };
     
     if (!taskData.title) {
@@ -164,15 +222,20 @@ async function createTask(event) {
             body: JSON.stringify(taskData)
         });
         
+        if (!response.ok) {
+            throw new Error(`HTTP错误: ${response.status}`);
+        }
+        
         const result = await response.json();
         if (result.success) {
             closeAddTaskModal();
             loadTasks();
         } else {
-            alert('创建失败: ' + result.error);
+            alert('创建失败: ' + (result.error || '未知错误'));
         }
     } catch (error) {
-        alert('网络错误: ' + error.message);
+        console.error('创建任务错误:', error);
+        alert('创建任务时出错: ' + (error.message || '请检查网络连接或刷新页面重试'));
     }
 }
 
@@ -181,14 +244,27 @@ function editTask(taskId) {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     
-    document.getElementById('editTaskId').value = task.id;
-    document.getElementById('editTaskTitle').value = task.title;
-    document.getElementById('editTaskDescription').value = task.description || '';
-    document.getElementById('editTaskPriority').value = task.priority;
-    document.getElementById('editTaskCategory').value = task.category;
-    document.getElementById('editTaskStatus').value = task.status;
+    const editTaskIdEl = document.getElementById('editTaskId');
+    const editTaskTitleEl = document.getElementById('editTaskTitle');
+    const editTaskDescriptionEl = document.getElementById('editTaskDescription');
+    const editTaskPriorityEl = document.getElementById('editTaskPriority');
+    const editTaskTagsEl = document.getElementById('editTaskTags');
+    const editTaskStatusEl = document.getElementById('editTaskStatus');
+    const editTaskModalEl = document.getElementById('editTaskModal');
     
-    document.getElementById('editTaskModal').style.display = 'block';
+    if (!editTaskIdEl || !editTaskTitleEl || !editTaskPriorityEl || !editTaskStatusEl || !editTaskModalEl) {
+        alert('编辑表单元素未找到，请刷新页面重试');
+        return;
+    }
+    
+    editTaskIdEl.value = task.id;
+    editTaskTitleEl.value = task.title;
+    if (editTaskDescriptionEl) editTaskDescriptionEl.value = task.description || '';
+    editTaskPriorityEl.value = task.priority;
+    if (editTaskTagsEl) editTaskTagsEl.value = task.tags || '';
+    editTaskStatusEl.value = task.status;
+    
+    editTaskModalEl.style.display = 'block';
 }
 
 // 关闭编辑任务模态框
@@ -200,13 +276,25 @@ function closeEditTaskModal() {
 async function updateTask(event) {
     event.preventDefault();
     
-    const taskId = parseInt(document.getElementById('editTaskId').value);
+    const editTaskIdEl = document.getElementById('editTaskId');
+    const editTaskTitleEl = document.getElementById('editTaskTitle');
+    const editTaskDescriptionEl = document.getElementById('editTaskDescription');
+    const editTaskPriorityEl = document.getElementById('editTaskPriority');
+    const editTaskTagsEl = document.getElementById('editTaskTags');
+    const editTaskStatusEl = document.getElementById('editTaskStatus');
+    
+    if (!editTaskIdEl || !editTaskTitleEl || !editTaskPriorityEl || !editTaskStatusEl) {
+        alert('表单元素未找到，请刷新页面重试');
+        return;
+    }
+    
+    const taskId = parseInt(editTaskIdEl.value);
     const taskData = {
-        title: document.getElementById('editTaskTitle').value.trim(),
-        description: document.getElementById('editTaskDescription').value.trim(),
-        priority: parseInt(document.getElementById('editTaskPriority').value),
-        category: document.getElementById('editTaskCategory').value,
-        status: document.getElementById('editTaskStatus').value
+        title: editTaskTitleEl.value.trim(),
+        description: editTaskDescriptionEl ? editTaskDescriptionEl.value.trim() : '',
+        priority: parseInt(editTaskPriorityEl.value) || 1,
+        tags: editTaskTagsEl ? editTaskTagsEl.value.trim() : '',
+        status: editTaskStatusEl.value
     };
     
     if (!taskData.title) {
@@ -316,14 +404,16 @@ async function loadAnalytics() {
             const data = result.data;
             
             // 更新统计卡片
+            document.getElementById('todayCompleted').textContent = data.today_completed || 0;
             document.getElementById('weeklyCompleted').textContent = data.completed_tasks;
             document.getElementById('totalFocusTime').textContent = Math.round(data.total_focus_time) + ' 分钟';
             document.getElementById('avgFocusTime').textContent = Math.round(data.avg_focus_time) + ' 分钟';
             
             // 绘制图表
             drawTasksChart(data.daily_stats);
-            drawCategoryChart(data.tasks_by_category);
+            drawTagsChart(data.tasks_by_tags || {});
             drawFocusTimeChart(data.daily_stats);
+            drawFocusDurationChart(data.focus_durations || []);
         } else {
             showError('加载数据失败: ' + result.error);
         }
@@ -334,83 +424,215 @@ async function loadAnalytics() {
 
 // 绘制任务完成图表
 function drawTasksChart(dailyStats) {
-    const ctx = document.getElementById('tasksChart').getContext('2d');
+    const ctx = document.getElementById('tasksChart');
+    if (chartInstances.tasksChart) {
+        chartInstances.tasksChart.destroy();
+    }
+    
     const dates = Object.keys(dailyStats).sort();
     const tasks = dates.map(date => dailyStats[date].tasks);
     
-    new Chart(ctx, {
-        type: 'bar',
+    const chartType = currentChartStyle === 'area' ? 'line' : currentChartStyle;
+    
+    chartInstances.tasksChart = new Chart(ctx, {
+        type: chartType,
         data: {
             labels: dates.map(d => new Date(d).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })),
             datasets: [{
                 label: '完成任务数',
                 data: tasks,
-                backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                backgroundColor: currentChartStyle === 'area' ? 'rgba(102, 126, 234, 0.3)' : 'rgba(102, 126, 234, 0.6)',
                 borderColor: 'rgba(102, 126, 234, 1)',
-                borderWidth: 1
+                borderWidth: 2,
+                fill: currentChartStyle === 'area',
+                tension: currentChartStyle === 'line' || currentChartStyle === 'area' ? 0.4 : 0
             }]
         },
         options: {
             responsive: true,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
             scales: {
                 y: {
                     beginAtZero: true
+                }
+            },
+            plugins: {
+                tooltip: {
+                    enabled: true
+                },
+                legend: {
+                    display: true
                 }
             }
         }
     });
 }
 
-// 绘制类别分布图表
-function drawCategoryChart(categoryData) {
-    const ctx = document.getElementById('categoryChart').getContext('2d');
-    const categories = Object.keys(categoryData);
-    const counts = Object.values(categoryData);
-    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+// 绘制标签分布图表
+function drawTagsChart(tagsData) {
+    const ctx = document.getElementById('tagsChart');
+    if (chartInstances.tagsChart) {
+        chartInstances.tagsChart.destroy();
+    }
     
-    new Chart(ctx, {
+    const tags = Object.keys(tagsData);
+    const counts = Object.values(tagsData);
+    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#4BC0C0', '#FF6384'];
+    
+    if (tags.length === 0) {
+        ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+        return;
+    }
+    
+    chartInstances.tagsChart = new Chart(ctx, {
         type: 'pie',
         data: {
-            labels: categories.map(c => getCategoryText(c)),
+            labels: tags,
             datasets: [{
                 data: counts,
-                backgroundColor: colors.slice(0, categories.length)
+                backgroundColor: colors.slice(0, tags.length),
+                borderWidth: 2,
+                borderColor: '#fff'
             }]
         },
         options: {
-            responsive: true
+            responsive: true,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                },
+                legend: {
+                    position: 'right'
+                }
+            }
+        }
+    });
+}
+
+// 绘制专注时长分布图表
+function drawFocusDurationChart(durations) {
+    const ctx = document.getElementById('focusDurationChart');
+    if (chartInstances.focusDurationChart) {
+        chartInstances.focusDurationChart.destroy();
+    }
+    
+    if (durations.length === 0) {
+        ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+        return;
+    }
+    
+    // 将时长分组（0-15, 15-30, 30-45, 45-60, 60+）
+    const bins = [0, 0, 0, 0, 0];
+    const labels = ['0-15分钟', '15-30分钟', '30-45分钟', '45-60分钟', '60+分钟'];
+    
+    durations.forEach(d => {
+        if (d < 15) bins[0]++;
+        else if (d < 30) bins[1]++;
+        else if (d < 45) bins[2]++;
+        else if (d < 60) bins[3]++;
+        else bins[4]++;
+    });
+    
+    chartInstances.focusDurationChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: bins,
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.6)',
+                    'rgba(54, 162, 235, 0.6)',
+                    'rgba(255, 206, 86, 0.6)',
+                    'rgba(75, 192, 192, 0.6)',
+                    'rgba(153, 102, 255, 0.6)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right'
+                }
+            }
         }
     });
 }
 
 // 绘制专注时间图表
 function drawFocusTimeChart(dailyStats) {
-    const ctx = document.getElementById('focusTimeChart').getContext('2d');
+    const ctx = document.getElementById('focusTimeChart');
+    if (chartInstances.focusTimeChart) {
+        chartInstances.focusTimeChart.destroy();
+    }
+    
     const dates = Object.keys(dailyStats).sort();
     const focusTimes = dates.map(date => dailyStats[date].focus_time);
     
-    new Chart(ctx, {
-        type: 'line',
+    const chartType = currentChartStyle === 'bar' ? 'bar' : 'line';
+    
+    chartInstances.focusTimeChart = new Chart(ctx, {
+        type: chartType,
         data: {
             labels: dates.map(d => new Date(d).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })),
             datasets: [{
                 label: '专注时间（分钟）',
                 data: focusTimes,
                 borderColor: 'rgba(76, 175, 80, 1)',
-                backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                tension: 0.4,
-                fill: true
+                backgroundColor: chartType === 'bar' ? 'rgba(76, 175, 80, 0.6)' : 'rgba(76, 175, 80, 0.1)',
+                tension: chartType === 'line' ? 0.4 : 0,
+                fill: chartType === 'line',
+                borderWidth: 2
             }]
         },
         options: {
             responsive: true,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
             scales: {
                 y: {
                     beginAtZero: true
                 }
+            },
+            plugins: {
+                tooltip: {
+                    enabled: true
+                }
             }
         }
     });
+}
+
+// 切换图表风格
+function changeChartStyle(style) {
+    currentChartStyle = style;
+    
+    // 更新按钮状态
+    document.querySelectorAll('.btn-chart-style').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('data-style') === style) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // 重新绘制图表
+    if (document.getElementById('analyticsSection').style.display !== 'none') {
+        loadAnalytics();
+    }
 }
 
 // 加载AI推荐
@@ -580,14 +802,164 @@ function getPriorityText(priority) {
     return texts[priority] || '低优先级';
 }
 
-function getCategoryText(category) {
-    const texts = {
-        'work': '工作',
-        'study': '学习',
-        'general': '一般',
-        'creative': '创意'
-    };
-    return texts[category] || category;
+// 顶部计时器功能
+function startTopTimer() {
+    if (topTimerRunning) return;
+    
+    // 如果是继续计时，需要从暂停的时间点继续
+    if (topTimerPausedDuration > 0) {
+        // 已经有暂停的时间，继续计时
+        resumeTopTimer();
+        return;
+    }
+    
+    // 全新开始
+    topTimerStartTimestamp = Date.now();
+    topTimerRunning = true;
+    topTimerPausedDuration = 0;
+    topTimerPauseStartTime = null;
+    
+    document.getElementById('topTimerStartBtn').style.display = 'none';
+    document.getElementById('topTimerStopBtn').style.display = 'inline-block';
+    document.getElementById('topTimerPauseBtn').style.display = 'inline-block';
+    document.getElementById('topTimerPauseBtn').textContent = '暂停';
+    
+    // 清除可能存在的旧计时器
+    if (topTimerInterval) {
+        clearInterval(topTimerInterval);
+    }
+    
+    // 启动新的计时器
+    topTimerInterval = setInterval(() => {
+        if (topTimerRunning && topTimerStartTimestamp) {
+            const elapsed = (Date.now() - topTimerStartTimestamp) / 1000 + topTimerPausedDuration;
+            updateTopTimerDisplay(elapsed);
+        }
+    }, 100);
+}
+
+function resumeTopTimer() {
+    if (topTimerRunning) return;
+    
+    // 继续计时：从新的时间戳开始，但显示时要加上已累计的时间
+    topTimerStartTimestamp = Date.now();
+    topTimerRunning = true;
+    topTimerPauseStartTime = null;
+    
+    document.getElementById('topTimerPauseBtn').textContent = '暂停';
+    
+    // 清除可能存在的旧计时器
+    if (topTimerInterval) {
+        clearInterval(topTimerInterval);
+    }
+    
+    // 重新启动计时器，显示时加上已累计的暂停时间
+    topTimerInterval = setInterval(() => {
+        if (topTimerRunning && topTimerStartTimestamp) {
+            const currentElapsed = (Date.now() - topTimerStartTimestamp) / 1000;
+            const totalElapsed = currentElapsed + topTimerPausedDuration;
+            updateTopTimerDisplay(totalElapsed);
+        }
+    }, 100);
+}
+
+function pauseTopTimer() {
+    if (!topTimerRunning) {
+        // 如果已经暂停，则继续
+        resumeTopTimer();
+        return;
+    }
+    
+    // 暂停时：累计当前已运行的时间到总时间中
+    if (topTimerStartTimestamp) {
+        const currentElapsed = (Date.now() - topTimerStartTimestamp) / 1000;
+        topTimerPausedDuration += currentElapsed; // 累加到总时间
+        topTimerStartTimestamp = null; // 清除开始时间
+        
+        // 更新显示为累计的总时间（暂停时显示固定值）
+        updateTopTimerDisplay(topTimerPausedDuration);
+    }
+    
+    // 停止计时器（重要：清除setInterval，这样时间就不会继续走）
+    if (topTimerInterval) {
+        clearInterval(topTimerInterval);
+        topTimerInterval = null;
+    }
+    
+    topTimerRunning = false;
+    topTimerPauseStartTime = Date.now();
+    
+    document.getElementById('topTimerPauseBtn').textContent = '继续';
+}
+
+function stopTopTimer() {
+    // 计算总时间
+    let totalSeconds = topTimerPausedDuration;
+    
+    if (topTimerRunning && topTimerStartTimestamp) {
+        // 如果正在运行，加上当前运行的时间
+        const currentElapsed = (Date.now() - topTimerStartTimestamp) / 1000;
+        totalSeconds = topTimerPausedDuration + currentElapsed;
+    }
+    
+    const duration = totalSeconds / 60; // 转换为分钟
+    
+    // 停止计时器
+    if (topTimerInterval) {
+        clearInterval(topTimerInterval);
+        topTimerInterval = null;
+    }
+    
+    // 记录专注时间
+    if (duration > 0.1) { // 至少记录0.1分钟
+        recordFocusTimeFromTopTimer(duration);
+    }
+    
+    // 重置所有状态
+    topTimerRunning = false;
+    topTimerStartTimestamp = null;
+    topTimerPausedDuration = 0;
+    topTimerPauseStartTime = null;
+    
+    document.getElementById('topTimerDisplay').textContent = '00:00:00';
+    document.getElementById('topTimerStartBtn').style.display = 'inline-block';
+    document.getElementById('topTimerStopBtn').style.display = 'none';
+    document.getElementById('topTimerPauseBtn').style.display = 'none';
+    document.getElementById('topTimerPauseBtn').textContent = '暂停';
+}
+
+function updateTopTimerDisplay(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    document.getElementById('topTimerDisplay').textContent = 
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+async function recordFocusTimeFromTopTimer(duration) {
+    try {
+        const endTime = new Date().toISOString();
+        const startTime = new Date(Date.now() - duration * 60 * 1000).toISOString();
+        
+        await fetch('/api/focus-time', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                duration: duration,
+                start_time: startTime,
+                end_time: endTime,
+                efficiency_score: 0.7
+            })
+        });
+        
+        // 刷新任务列表
+        loadTasks();
+    } catch (error) {
+        console.error('记录专注时间失败:', error);
+    }
 }
 
 function formatDate(dateString) {

@@ -19,6 +19,24 @@
             </div>
         </header>
 
+        <!-- 顶部专注计时器 -->
+        <div class="top-timer" id="topTimer">
+            <div class="timer-content">
+                <div class="timer-left">
+                    <span class="timer-icon">⏱️</span>
+                    <div class="timer-info">
+                        <div class="timer-label">专注时间</div>
+                        <div class="timer-display-top" id="topTimerDisplay">00:00:00</div>
+                    </div>
+                </div>
+                <div class="timer-right">
+                    <button class="btn btn-timer-start" id="topTimerStartBtn" onclick="startTopTimer()">开始</button>
+                    <button class="btn btn-timer-stop" id="topTimerStopBtn" onclick="stopTopTimer()" style="display: none;">停止</button>
+                    <button class="btn btn-timer-pause" id="topTimerPauseBtn" onclick="pauseTopTimer()" style="display: none;">暂停</button>
+                </div>
+            </div>
+        </div>
+
         <main>
             <!-- 任务列表区域 -->
             <section class="tasks-section">
@@ -35,13 +53,7 @@
                         <option value="2">中优先级</option>
                         <option value="1">低优先级</option>
                     </select>
-                    <select id="filterCategory" onchange="filterTasks()">
-                        <option value="all">全部分类</option>
-                        <option value="work">工作</option>
-                        <option value="study">学习</option>
-                        <option value="general">一般</option>
-                        <option value="creative">创意</option>
-                    </select>
+                    <input type="text" id="filterTags" placeholder="过滤标签（用逗号分隔）" onkeyup="filterTasks()">
                 </div>
                 <div id="tasksList" class="tasks-list"></div>
             </section>
@@ -49,21 +61,34 @@
             <!-- 数据分析区域 -->
             <section class="analytics-section" id="analyticsSection" style="display: none;">
                 <h2>📊 数据分析</h2>
+                <div class="chart-style-selector">
+                    <button class="btn-chart-style active" onclick="changeChartStyle('bar')" data-style="bar">柱状图</button>
+                    <button class="btn-chart-style" onclick="changeChartStyle('line')" data-style="line">折线图</button>
+                    <button class="btn-chart-style" onclick="changeChartStyle('area')" data-style="area">面积图</button>
+                </div>
                 <div class="analytics-grid">
                     <div class="chart-container">
                         <h3>每周完成任务数</h3>
                         <canvas id="tasksChart"></canvas>
                     </div>
                     <div class="chart-container">
-                        <h3>任务类别分布</h3>
-                        <canvas id="categoryChart"></canvas>
+                        <h3>任务标签分布</h3>
+                        <canvas id="tagsChart"></canvas>
                     </div>
                     <div class="chart-container">
                         <h3>专注时间趋势</h3>
                         <canvas id="focusTimeChart"></canvas>
                     </div>
+                    <div class="chart-container">
+                        <h3>专注时长分布</h3>
+                        <canvas id="focusDurationChart"></canvas>
+                    </div>
                 </div>
                 <div class="stats-cards">
+                    <div class="stat-card">
+                        <h4>今日完成任务</h4>
+                        <p id="todayCompleted">0</p>
+                    </div>
                     <div class="stat-card">
                         <h4>本周完成任务</h4>
                         <p id="weeklyCompleted">0</p>
@@ -127,13 +152,9 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>分类</label>
-                    <select id="taskCategory">
-                        <option value="general" selected>一般</option>
-                        <option value="work">工作</option>
-                        <option value="study">学习</option>
-                        <option value="creative">创意</option>
-                    </select>
+                    <label>标签（用逗号分隔，如：工作,重要,紧急）</label>
+                    <input type="text" id="taskTags" placeholder="例如：工作,学习,重要">
+                    <small style="color: #666;">多个标签用逗号分隔</small>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeAddTaskModal()">取消</button>
@@ -167,13 +188,9 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>分类</label>
-                    <select id="editTaskCategory">
-                        <option value="general">一般</option>
-                        <option value="work">工作</option>
-                        <option value="study">学习</option>
-                        <option value="creative">创意</option>
-                    </select>
+                    <label>标签（用逗号分隔）</label>
+                    <input type="text" id="editTaskTags" placeholder="例如：工作,学习,重要">
+                    <small style="color: #666;">多个标签用逗号分隔</small>
                 </div>
                 <div class="form-group">
                     <label>状态</label>

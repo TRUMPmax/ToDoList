@@ -31,8 +31,8 @@ class FocusTimePredictor:
             high_priority_ratio = user_data.get('high_priority_ratio', 0.3)
             # 每周完成任务数
             weekly_completed = user_data.get('weekly_completed', 5)
-            # 任务类别
-            category_encoded = user_data.get('category_encoded', 0)
+            # 任务标签编码
+            tag_encoded = user_data.get('tag_encoded', 0)
             
             features = [
                 avg_duration,
@@ -40,7 +40,7 @@ class FocusTimePredictor:
                 avg_efficiency,
                 high_priority_ratio,
                 weekly_completed,
-                category_encoded
+                tag_encoded
             ]
         else:
             # 默认特征

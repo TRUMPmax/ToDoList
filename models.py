@@ -12,7 +12,7 @@ class Task(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     priority = db.Column(db.Integer, default=1)  # 1-低, 2-中, 3-高
-    category = db.Column(db.String(50), default='general')
+    tags = db.Column(db.String(500), default='')  # 自定义标签，多个标签用逗号分隔
     status = db.Column(db.String(20), default='pending')  # pending, completed
     order_index = db.Column(db.Integer, default=0)  # 用于排序
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -24,7 +24,7 @@ class Task(db.Model):
             'title': self.title,
             'description': self.description,
             'priority': self.priority,
-            'category': self.category,
+            'tags': self.tags,
             'status': self.status,
             'order_index': self.order_index,
             'created_at': self.created_at.isoformat() if self.created_at else None,
