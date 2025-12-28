@@ -3,223 +3,292 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智能日程表 - 任务管理系统</title>
+    <title>任务管理 | Task Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 <body>
-    <div class="container">
+    <div class="app-wrapper">
         <header>
-            <h1>📅 智能日程表</h1>
+            <div class="brand">
+                <i class="ri-checkbox-circle-fill"></i>
+                <h1>FocusFlow</h1>
+            </div>
             <div class="header-actions">
-                <button class="btn btn-primary" onclick="showAddTaskModal()">+ 添加任务</button>
-                <button class="btn btn-secondary" onclick="loadAnalytics()">📊 数据分析</button>
-                <button class="btn btn-info" onclick="loadRecommendation()">🤖 AI推荐</button>
+                <button class="btn btn-primary" onclick="showAddTaskModal()">
+                    <i class="ri-add-line"></i> 新建任务
+                </button>
+                <button class="btn btn-ghost" onclick="loadAnalytics()">
+                    <i class="ri-bar-chart-box-line"></i> 数据分析
+                </button>
+                <button class="btn btn-ghost" onclick="loadRecommendation()">
+                    <i class="ri-brain-line"></i> 智能推荐
+                </button>
             </div>
         </header>
 
-        <!-- 顶部专注计时器 -->
-        <div class="top-timer" id="topTimer">
-            <div class="timer-content">
-                <div class="timer-left">
-                    <span class="timer-icon">⏱️</span>
-                    <div class="timer-info">
-                        <div class="timer-label">专注时间</div>
-                        <div class="timer-display-top" id="topTimerDisplay">00:00:00</div>
+        <div class="main-content">
+            <div class="top-timer-card" id="topTimer">
+                <div class="timer-content">
+                    <div class="timer-left">
+                        <div class="timer-icon-box">
+                            <i class="ri-timer-flash-line"></i>
+                        </div>
+                        <div class="timer-info">
+                            <span class="timer-label">当前专注</span>
+                            <div class="timer-display-top" id="topTimerDisplay">00:00:00</div>
+                        </div>
                     </div>
-                </div>
-                <div class="timer-right">
-                    <button class="btn btn-timer-start" id="topTimerStartBtn" onclick="startTopTimer()">开始</button>
-                    <button class="btn btn-timer-stop" id="topTimerStopBtn" onclick="stopTopTimer()" style="display: none;">停止</button>
-                    <button class="btn btn-timer-pause" id="topTimerPauseBtn" onclick="pauseTopTimer()" style="display: none;">暂停</button>
+                    <div class="timer-controls">
+                        <button class="btn btn-sm btn-outline" id="topTimerStartBtn" onclick="startTopTimer()">
+                            <i class="ri-play-fill"></i> 开始
+                        </button>
+                        <button class="btn btn-sm btn-danger-outline" id="topTimerStopBtn" onclick="stopTopTimer()" style="display: none;">
+                            <i class="ri-stop-fill"></i> 停止
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="topTimerPauseBtn" onclick="pauseTopTimer()" style="display: none;">
+                            <i class="ri-pause-fill"></i> 暂停
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            <main>
+                <section class="tasks-section">
+                    <div class="section-header">
+                        <h2>我的任务</h2>
+                        <div class="filter-bar">
+                            <div class="select-wrapper">
+                                <select id="filterStatus" onchange="filterTasks()">
+                                    <option value="pending" selected>待完成</option>
+                                    <option value="completed">已完成</option>
+                                    <option value="all">所有状态</option>
+                                </select>
+                                <i class="ri-arrow-down-s-line"></i>
+                            </div>
+                            <div class="select-wrapper">
+                                <select id="filterPriority" onchange="filterTasks()">
+                                    <option value="all">所有优先级</option>
+                                    <option value="3">高优先级</option>
+                                    <option value="2">中优先级</option>
+                                    <option value="1">低优先级</option>
+                                </select>
+                                <i class="ri-arrow-down-s-line"></i>
+                            </div>
+                            <div class="input-wrapper">
+                                <i class="ri-search-line"></i>
+                                <input type="text" id="filterTags" placeholder="搜索标签..." onkeyup="filterTasks()">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="tasksList" class="tasks-list"></div>
+                </section>
+
+                <section class="analytics-section glass-panel" id="analyticsSection" style="display: none;">
+                    <div class="section-header">
+                        <h2>数据洞察</h2>
+                        <div class="chart-style-selector">
+                            <button class="btn-icon active" onclick="changeChartStyle('bar')" data-style="bar" title="柱状图"><i class="ri-bar-chart-fill"></i></button>
+                            <button class="btn-icon" onclick="changeChartStyle('line')" data-style="line" title="折线图"><i class="ri-line-chart-fill"></i></button>
+                            <button class="btn-icon" onclick="changeChartStyle('area')" data-style="area" title="面积图"><i class="ri-numbers-fill"></i></button>
+                        </div>
+                    </div>
+                    
+                    <div class="stats-cards">
+                        <div class="stat-card">
+                            <div class="stat-icon blue"><i class="ri-check-double-line"></i></div>
+                            <div class="stat-info">
+                                <h4>今日完成</h4>
+                                <p id="todayCompleted">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon green"><i class="ri-calendar-check-line"></i></div>
+                            <div class="stat-info">
+                                <h4>本周完成</h4>
+                                <p id="weeklyCompleted">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon purple"><i class="ri-time-line"></i></div>
+                            <div class="stat-info">
+                                <h4>总专注</h4>
+                                <p id="totalFocusTime">0 分钟</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon orange"><i class="ri-speed-line"></i></div>
+                            <div class="stat-info">
+                                <h4>平均专注</h4>
+                                <p id="avgFocusTime">0 分钟</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="analytics-grid">
+                        <div class="chart-container">
+                            <h3>每周趋势</h3>
+                            <canvas id="tasksChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>标签分布</h3>
+                            <canvas id="tagsChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>专注时长</h3>
+                            <canvas id="focusTimeChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3>时长分布</h3>
+                            <canvas id="focusDurationChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="recommendation-section" id="recommendationSection" style="display: none;">
+                    <h2>AI 智能助手</h2>
+                    <div class="recommendation-card">
+                        <div class="recommendation-content">
+                            <div class="ai-avatar">
+                                <i class="ri-magic-line"></i>
+                            </div>
+                            <h3>建议专注时长</h3>
+                            <div class="recommended-duration">
+                                <span id="recommendedDuration">25</span>
+                                <span class="unit">min</span>
+                            </div>
+                            <div class="confidence-badge">
+                                <i class="ri-shield-check-line"></i>
+                                置信度: <span id="confidence">0.5</span>
+                            </div>
+                            <button class="btn btn-primary btn-lg" onclick="startFocusTimer()">
+                                <i class="ri-play-circle-line"></i> 开始专注
+                            </button>
+                        </div>
+                        <div class="recommendation-info">
+                            <h4><i class="ri-file-list-3-line"></i> 分析依据</h4>
+                            <ul id="recommendationInfo"></ul>
+                        </div>
+                    </div>
+                </section>
+            </main>
         </div>
-
-        <main>
-            <!-- 任务列表区域 -->
-            <section class="tasks-section">
-                <h2>我的任务</h2>
-                <div class="filter-bar">
-                    <select id="filterStatus" onchange="filterTasks()">
-                        <option value="all">全部状态</option>
-                        <option value="pending">待完成</option>
-                        <option value="completed">已完成</option>
-                    </select>
-                    <select id="filterPriority" onchange="filterTasks()">
-                        <option value="all">全部优先级</option>
-                        <option value="3">高优先级</option>
-                        <option value="2">中优先级</option>
-                        <option value="1">低优先级</option>
-                    </select>
-                    <input type="text" id="filterTags" placeholder="过滤标签（用逗号分隔）" onkeyup="filterTasks()">
-                </div>
-                <div id="tasksList" class="tasks-list"></div>
-            </section>
-
-            <!-- 数据分析区域 -->
-            <section class="analytics-section" id="analyticsSection" style="display: none;">
-                <h2>📊 数据分析</h2>
-                <div class="chart-style-selector">
-                    <button class="btn-chart-style active" onclick="changeChartStyle('bar')" data-style="bar">柱状图</button>
-                    <button class="btn-chart-style" onclick="changeChartStyle('line')" data-style="line">折线图</button>
-                    <button class="btn-chart-style" onclick="changeChartStyle('area')" data-style="area">面积图</button>
-                </div>
-                <div class="analytics-grid">
-                    <div class="chart-container">
-                        <h3>每周完成任务数</h3>
-                        <canvas id="tasksChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h3>任务标签分布</h3>
-                        <canvas id="tagsChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h3>专注时间趋势</h3>
-                        <canvas id="focusTimeChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h3>专注时长分布</h3>
-                        <canvas id="focusDurationChart"></canvas>
-                    </div>
-                </div>
-                <div class="stats-cards">
-                    <div class="stat-card">
-                        <h4>今日完成任务</h4>
-                        <p id="todayCompleted">0</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>本周完成任务</h4>
-                        <p id="weeklyCompleted">0</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>总专注时间</h4>
-                        <p id="totalFocusTime">0 分钟</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>平均专注时长</h4>
-                        <p id="avgFocusTime">0 分钟</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- AI推荐区域 -->
-            <section class="recommendation-section" id="recommendationSection" style="display: none;">
-                <h2>🤖 AI专注时间推荐</h2>
-                <div class="recommendation-card">
-                    <div class="recommendation-content">
-                        <h3>推荐专注时长</h3>
-                        <div class="recommended-duration">
-                            <span id="recommendedDuration">25</span>
-                            <span class="unit">分钟</span>
-                        </div>
-                        <div class="confidence">
-                            <span>置信度: </span>
-                            <span id="confidence">0.5</span>
-                        </div>
-                        <button class="btn btn-primary" onclick="startFocusTimer()">开始专注</button>
-                    </div>
-                    <div class="recommendation-info">
-                        <h4>推荐依据</h4>
-                        <ul id="recommendationInfo"></ul>
-                    </div>
-                </div>
-            </section>
-        </main>
     </div>
 
-    <!-- 添加任务模态框 -->
     <div id="addTaskModal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="closeAddTaskModal()">&times;</span>
-            <h2>添加新任务</h2>
+            <div class="modal-header">
+                <h2>新建任务</h2>
+                <span class="close-btn" onclick="closeAddTaskModal()"><i class="ri-close-line"></i></span>
+            </div>
             <form id="addTaskForm" onsubmit="createTask(event)">
                 <div class="form-group">
-                    <label>任务标题 *</label>
-                    <input type="text" id="taskTitle" required>
+                    <label>任务标题</label>
+                    <input type="text" id="taskTitle" required placeholder="准备做什么？">
                 </div>
                 <div class="form-group">
-                    <label>任务描述</label>
-                    <textarea id="taskDescription" rows="3"></textarea>
+                    <label>描述 (可选)</label>
+                    <textarea id="taskDescription" rows="3" placeholder="添加详细说明..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <div class="select-wrapper">
+                            <select id="taskPriority">
+                                <option value="1">🟢 低</option>
+                                <option value="2" selected>🟡 中</option>
+                                <option value="3">🔴 高</option>
+                            </select>
+                            <i class="ri-arrow-down-s-line"></i>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label>优先级</label>
-                    <select id="taskPriority">
-                        <option value="1">低</option>
-                        <option value="2" selected>中</option>
-                        <option value="3">高</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>标签（用逗号分隔，如：工作,重要,紧急）</label>
-                    <input type="text" id="taskTags" placeholder="例如：工作,学习,重要">
-                    <small style="color: #666;">多个标签用逗号分隔</small>
+                    <label>标签</label>
+                    <input type="text" id="taskTags" placeholder="工作, 学习 (用逗号分隔)">
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeAddTaskModal()">取消</button>
-                    <button type="submit" class="btn btn-primary">创建</button>
+                    <button type="button" class="btn btn-ghost" onclick="closeAddTaskModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">创建任务</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- 编辑任务模态框 -->
     <div id="editTaskModal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="closeEditTaskModal()">&times;</span>
-            <h2>编辑任务</h2>
+            <div class="modal-header">
+                <h2>编辑任务</h2>
+                <span class="close-btn" onclick="closeEditTaskModal()"><i class="ri-close-line"></i></span>
+            </div>
             <form id="editTaskForm" onsubmit="updateTask(event)">
                 <input type="hidden" id="editTaskId">
                 <div class="form-group">
-                    <label>任务标题 *</label>
+                    <label>任务标题</label>
                     <input type="text" id="editTaskTitle" required>
                 </div>
                 <div class="form-group">
-                    <label>任务描述</label>
+                    <label>描述</label>
                     <textarea id="editTaskDescription" rows="3"></textarea>
                 </div>
-                <div class="form-group">
-                    <label>优先级</label>
-                    <select id="editTaskPriority">
-                        <option value="1">低</option>
-                        <option value="2">中</option>
-                        <option value="3">高</option>
-                    </select>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <div class="select-wrapper">
+                            <select id="editTaskPriority">
+                                <option value="1">🟢 低</option>
+                                <option value="2">🟡 中</option>
+                                <option value="3">🔴 高</option>
+                            </select>
+                            <i class="ri-arrow-down-s-line"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>状态</label>
+                        <div class="select-wrapper">
+                            <select id="editTaskStatus">
+                                <option value="pending">待完成</option>
+                                <option value="completed">已完成</option>
+                            </select>
+                            <i class="ri-arrow-down-s-line"></i>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label>标签（用逗号分隔）</label>
-                    <input type="text" id="editTaskTags" placeholder="例如：工作,学习,重要">
-                    <small style="color: #666;">多个标签用逗号分隔</small>
-                </div>
-                <div class="form-group">
-                    <label>状态</label>
-                    <select id="editTaskStatus">
-                        <option value="pending">待完成</option>
-                        <option value="completed">已完成</option>
-                    </select>
+                    <label>标签</label>
+                    <input type="text" id="editTaskTags">
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeEditTaskModal()">取消</button>
-                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-ghost" onclick="closeEditTaskModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- 专注计时器 -->
     <div id="focusTimerModal" class="modal">
-        <div class="modal-content timer-modal">
-            <h2>专注计时器</h2>
-            <div class="timer-display">
+        <div class="modal-content timer-modal-content">
+            <div class="timer-circle">
                 <div id="timerTime">25:00</div>
-                <div class="timer-controls">
-                    <button class="btn btn-primary" id="timerStartBtn" onclick="toggleTimer()">开始</button>
-                    <button class="btn btn-secondary" onclick="stopTimer()">停止</button>
-                </div>
+                <div class="timer-status">FOCUS</div>
             </div>
             <div class="timer-task-info">
-                <p>当前任务: <span id="timerTaskTitle">无</span></p>
+                <p>正在进行: <span id="timerTaskTitle" class="highlight-text">无</span></p>
+            </div>
+            <div class="timer-controls-lg">
+                <button class="btn btn-primary btn-round" id="timerStartBtn" onclick="toggleTimer()">
+                    <i class="ri-play-fill"></i>
+                </button>
+                <button class="btn btn-secondary btn-round" onclick="stopTimer()">
+                    <i class="ri-stop-fill"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -227,4 +296,3 @@
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
-

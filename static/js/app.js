@@ -21,6 +21,18 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             initSortable();
         }, 100);
+        
+        // 确保select元素可以正常工作
+        const filterStatusEl = document.getElementById('filterStatus');
+        if (filterStatusEl) {
+            console.log('filterStatus元素已找到，当前值:', filterStatusEl.value);
+            // 添加额外的事件监听器用于调试
+            filterStatusEl.addEventListener('change', function() {
+                console.log('filterStatus值已改变为:', this.value);
+            });
+        } else {
+            console.error('filterStatus元素未找到！');
+        }
     } catch (error) {
         console.error('初始化错误:', error);
     }
@@ -52,13 +64,26 @@ function renderTasks() {
     const priorityFilterEl = document.getElementById('filterPriority');
     const tagsFilterEl = document.getElementById('filterTags');
     
-    const statusFilter = statusFilterEl ? statusFilterEl.value : 'all';
+    const statusFilter = statusFilterEl ? statusFilterEl.value : 'pending'; // 默认只显示待完成
     const priorityFilter = priorityFilterEl ? priorityFilterEl.value : 'all';
     
     // 过滤任务
     const tagsFilter = tagsFilterEl ? tagsFilterEl.value.trim().toLowerCase() : '';
+    
+    // 调试信息
+    console.log('renderTasks - statusFilter:', statusFilter, 'tasks总数:', tasks.length);
+    const completedCount = tasks.filter(t => t.status === 'completed').length;
+    const pendingCount = tasks.filter(t => t.status === 'pending').length;
+    console.log('任务状态分布 - pending:', pendingCount, 'completed:', completedCount);
+    
     let filteredTasks = tasks.filter(task => {
-        if (statusFilter !== 'all' && task.status !== statusFilter) return false;
+        // 默认只显示待完成的任务，除非用户选择查看已完成或全部
+        if (statusFilter === 'all') {
+            // 如果选择"全部"，显示所有任务
+        } else if (statusFilter !== task.status) {
+            return false;
+        }
+        
         if (priorityFilter !== 'all' && task.priority != priorityFilter) return false;
         if (tagsFilter) {
             const taskTags = (task.tags || '').toLowerCase();
@@ -69,11 +94,48 @@ function renderTasks() {
         return true;
     });
     
-    // 按order_index排序
-    filteredTasks.sort((a, b) => a.order_index - b.order_index);
+    // 如果查看已完成任务，按完成时间倒序排列（最近完成的在前），且只显示最近14天
+    if (statusFilter === 'completed') {
+        console.log('正在过滤已完成任务，过滤前数量:', filteredTasks.length);
+        // 只显示最近14天的已完成任务
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 14);
+        const beforeCount = filteredTasks.length;
+        
+        // 先过滤出有completed_at的任务
+        filteredTasks = filteredTasks.filter(task => {
+            if (!task.completed_at) {
+                console.log('任务缺少completed_at，将被过滤:', task.id, task.title, '状态:', task.status);
+                return false;
+            }
+            const taskDate = new Date(task.completed_at);
+            const isWithin14Days = taskDate >= cutoffDate;
+            if (!isWithin14Days) {
+                console.log('任务超过14天，将被过滤:', task.id, task.title, '完成时间:', task.completed_at);
+            }
+            return isWithin14Days;
+        });
+        console.log('已完成任务过滤后数量:', filteredTasks.length, '(过滤前:', beforeCount, ')');
+        
+        // 按完成时间倒序排列
+        filteredTasks.sort((a, b) => {
+            const dateA = a.completed_at ? new Date(a.completed_at) : new Date(0);
+            const dateB = b.completed_at ? new Date(b.completed_at) : new Date(0);
+            return dateB - dateA; // 倒序，最近完成的在前
+        });
+    } else {
+        // 待完成任务按order_index排序
+        filteredTasks.sort((a, b) => a.order_index - b.order_index);
+    }
+    
+    console.log('最终过滤结果数量:', filteredTasks.length, '状态筛选:', statusFilter);
     
     if (filteredTasks.length === 0) {
-        tasksList.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">暂无任务，点击"添加任务"开始吧！</p>';
+        if (statusFilter === 'completed') {
+            tasksList.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">最近14天内没有已完成的任务</p>';
+        } else {
+            tasksList.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">暂无任务，点击"添加任务"开始吧！</p>';
+        }
         return;
     }
     
@@ -87,6 +149,7 @@ function renderTasks() {
                     <span class="task-badge badge-priority">${getPriorityText(task.priority)}</span>
                     ${task.tags ? task.tags.split(',').map(tag => `<span class="task-badge badge-tag">${escapeHtml(tag.trim())}</span>`).join('') : ''}
                     <span>创建: ${formatDate(task.created_at)}</span>
+                    ${task.completed_at ? `<span style="margin-left: 10px;">完成: ${formatDate(task.completed_at)}</span>` : ''}
                 </div>
             </div>
             <div class="task-actions">
@@ -100,56 +163,21 @@ function renderTasks() {
         </div>
     `).join('');
     
-    // 重新初始化排序
-    initSortable();
-}
-
-// 初始化拖拽排序
-function initSortable() {
-    const tasksList = document.getElementById('tasksList');
-    if (sortable) {
-        sortable.destroy();
-    }
-    
-    sortable = Sortable.create(tasksList, {
-        animation: 150,
-        handle: '.task-card',
-        onEnd: function(evt) {
-            const taskIds = Array.from(tasksList.children).map(el => 
-                parseInt(el.getAttribute('data-task-id'))
-            );
-            reorderTasks(taskIds);
-        }
-    });
-}
-
-// 重新排序任务
-async function reorderTasks(taskIds) {
-    try {
-        const response = await fetch('/api/tasks/reorder', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ task_ids: taskIds })
-        });
-        
-        const result = await response.json();
-        if (result.success) {
-            loadTasks();
-        } else {
-            showError('排序失败: ' + result.error);
-            loadTasks(); // 重新加载恢复原顺序
-        }
-    } catch (error) {
-        showError('网络错误: ' + error.message);
-        loadTasks();
+    // 重新初始化排序（仅对待完成任务）
+    if (statusFilter !== 'completed') {
+        initSortable();
     }
 }
 
 // 过滤任务
 function filterTasks() {
     try {
+        const statusFilterEl = document.getElementById('filterStatus');
+        if (!statusFilterEl) {
+            console.error('filterStatus元素未找到');
+            return;
+        }
+        console.log('当前选择的状态:', statusFilterEl.value);
         renderTasks();
     } catch (error) {
         console.error('过滤任务时出错:', error);
@@ -402,6 +430,8 @@ async function loadAnalytics() {
         
         if (result.success) {
             const data = result.data;
+            // 缓存数据
+            window.lastAnalyticsData = data;
             
             // 更新统计卡片
             document.getElementById('todayCompleted').textContent = data.today_completed || 0;
@@ -629,9 +659,53 @@ function changeChartStyle(style) {
         }
     });
     
-    // 重新绘制图表
-    if (document.getElementById('analyticsSection').style.display !== 'none') {
-        loadAnalytics();
+    // 重新绘制图表（不关闭可视化区域）
+    const section = document.getElementById('analyticsSection');
+    if (section && section.style.display !== 'none') {
+        // 使用缓存的数据重新绘制，避免重新加载数据
+        if (window.lastAnalyticsData) {
+            const data = window.lastAnalyticsData;
+            drawTasksChart(data.daily_stats);
+            drawTagsChart(data.tasks_by_tags || {});
+            drawFocusTimeChart(data.daily_stats);
+            drawFocusDurationChart(data.focus_durations || []);
+        } else {
+            // 如果没有缓存，重新加载数据
+            loadAnalyticsDataOnly();
+        }
+    }
+}
+
+// 只加载数据并绘制，不切换显示状态
+async function loadAnalyticsDataOnly() {
+    try {
+        const response = await fetch('/api/analytics/weekly');
+        const result = await response.json();
+        
+        if (result.success) {
+            const data = result.data;
+            // 缓存数据
+            window.lastAnalyticsData = data;
+            
+            // 更新统计卡片
+            const todayCompletedEl = document.getElementById('todayCompleted');
+            const weeklyCompletedEl = document.getElementById('weeklyCompleted');
+            const totalFocusTimeEl = document.getElementById('totalFocusTime');
+            const avgFocusTimeEl = document.getElementById('avgFocusTime');
+            
+            if (todayCompletedEl) todayCompletedEl.textContent = data.today_completed || 0;
+            if (weeklyCompletedEl) weeklyCompletedEl.textContent = data.completed_tasks;
+            if (totalFocusTimeEl) totalFocusTimeEl.textContent = Math.round(data.total_focus_time) + ' 分钟';
+            if (avgFocusTimeEl) avgFocusTimeEl.textContent = Math.round(data.avg_focus_time) + ' 分钟';
+            
+            // 绘制图表
+            drawTasksChart(data.daily_stats);
+            drawTagsChart(data.tasks_by_tags || {});
+            drawFocusTimeChart(data.daily_stats);
+            drawFocusDurationChart(data.focus_durations || []);
+        }
+    } catch (error) {
+        console.error('加载数据失败:', error);
     }
 }
 
@@ -727,6 +801,10 @@ function updateTimerDisplay() {
 // 切换计时器
 function toggleTimer() {
     const btn = document.getElementById('timerStartBtn');
+    if (!btn) {
+        console.error('计时器按钮未找到');
+        return;
+    }
     
     if (timerInterval) {
         // 暂停
@@ -735,17 +813,25 @@ function toggleTimer() {
         btn.textContent = '继续';
     } else {
         // 开始/继续
+        // 检查focusTimer是否已初始化
+        if (focusTimer === null || focusTimer === undefined) {
+            alert('请先设置计时器时长');
+            return;
+        }
+        
         if (!timerStartTime) {
             timerStartTime = Date.now();
         }
         
         timerInterval = setInterval(() => {
-            focusTimer--;
-            updateTimerDisplay();
-            
-            if (focusTimer <= 0) {
-                stopTimer();
-                alert('专注时间到！');
+            if (focusTimer !== null && focusTimer !== undefined) {
+                focusTimer--;
+                updateTimerDisplay();
+                
+                if (focusTimer <= 0) {
+                    stopTimer();
+                    alert('专注时间到！');
+                }
             }
         }, 1000);
         

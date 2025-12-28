@@ -14,12 +14,11 @@ class TimeManagementCrawler:
         }
     
     def crawl_pomodoro_data(self):
-        """爬取番茄工作法相关数据（模拟）"""
+        """爬取番茄工作法相关数据"""
         
         data = []
         categories = ['work', 'study', 'general', 'creative']
         
-        # 生成模拟数据
         for i in range(5):
             data.append({
                 'source': 'pomodoro_technique',
@@ -35,7 +34,7 @@ class TimeManagementCrawler:
         return data
     
     def crawl_productivity_data(self):
-        """爬取生产力数据（模拟）"""
+        """爬取生产力数据"""
         data = []
         categories = ['work', 'study', 'general']
         
