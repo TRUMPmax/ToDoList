@@ -26,11 +26,32 @@ crawler = TimeManagementCrawler()
 scheduler = BackgroundScheduler()
 scheduler.start()
 
+def cleanup_crawled_data(max_count=200):
+    """清理爬虫数据，保留最新的max_count条"""
+    try:
+        current_count = CrawledData.query.count()
+        if current_count > max_count:
+            delete_count = current_count - max_count
+            # 按爬取时间升序排列，获取最旧的数据
+            old_data = CrawledData.query.order_by(CrawledData.crawled_at.asc()).limit(delete_count).all()
+            for old_item in old_data:
+                db.session.delete(old_item)
+            db.session.commit()
+            print(f"清理爬虫数据：删除了 {delete_count} 条最旧的数据，保留最新的 {max_count} 条")
+            return delete_count
+        return 0
+    except Exception as e:
+        db.session.rollback()
+        print(f"清理爬虫数据错误: {e}")
+        return 0
+
 def scheduled_crawl():
     """定时爬取任务"""
     with app.app_context():
         try:
             data = crawler.crawl_all()
+            
+            # 添加新数据
             for item in data:
                 crawled = CrawledData(
                     source=item['source'],
@@ -40,9 +61,16 @@ def scheduled_crawl():
                     raw_data=item['raw_data']
                 )
                 db.session.add(crawled)
+            
             db.session.commit()
-            print(f"爬取完成，获得 {len(data)} 条数据")
+            
+            # 添加新数据后，清理多余的数据（保留最新的200条）
+            cleanup_crawled_data(max_count=200)
+            
+            final_count = CrawledData.query.count()
+            print(f"爬取完成，获得 {len(data)} 条数据，当前数据库中共有 {final_count} 条爬虫数据")
         except Exception as e:
+            db.session.rollback()
             print(f"定时爬取错误: {e}")
 
 # 每天凌晨2点执行爬取
@@ -407,7 +435,6 @@ def get_weekly_analytics():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# ============ 机器学习推荐API ============
 
 def get_user_data():
     """获取用户数据用于模型训练和预测（使用真实数据库数据）"""
@@ -618,7 +645,6 @@ def get_recommendation():
 
 @app.route('/api/recommendation/train', methods=['POST'])
 def train_recommendation_model():
-    """手动训练模型"""
     try:
         success = train_model()
         return jsonify({
@@ -628,15 +654,15 @@ def train_recommendation_model():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# 启动入口 只有直接启动app.py时才会被执行 避免被import时意外启动服务
 if __name__ == '__main__':
     with app.app_context():
-        # 创建所有表（如果不存在）
+        # 创建所有表（不会覆盖已有表）
         db.create_all()
         
-        # 尝试迁移旧数据：将category字段迁移到tags字段
+        # 尝试迁移第一版数据库数据：将category字段迁移到tags字段
         try:
             from sqlalchemy import text
-            # 检查是否有category列但没有tags列
             result = db.session.execute(text("PRAGMA table_info(tasks)"))
             columns = [row[1] for row in result]
             
@@ -657,6 +683,12 @@ if __name__ == '__main__':
         # 初始化时执行一次数据清理
         try:
             cleanup_old_data()
+        except:
+            pass
+        
+        # 初始化时清理爬虫数据（确保不超过200条）
+        try:
+            cleanup_crawled_data(max_count=200)
         except:
             pass
         

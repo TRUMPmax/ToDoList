@@ -13,7 +13,7 @@ class FocusTimePredictor:
     def __init__(self):
         self.model = RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10)
         self.scaler = StandardScaler()
-        self.is_trained = False
+        self.is_trained = True
         
     def prepare_features(self, user_data, crawled_data=None):
         """准备特征数据"""

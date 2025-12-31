@@ -51,7 +51,7 @@ async function loadTasks() {
             showError('加载任务失败: ' + result.error);
         }
     } catch (error) {
-        showError('网络错误: ' + error.message);
+//        showError('网络错误: ' + error.message);
     }
 }
 
@@ -347,7 +347,7 @@ async function updateTask(event) {
             alert('更新失败: ' + result.error);
         }
     } catch (error) {
-        alert('网络错误: ' + error.message);
+//        alert('网络错误: ' + error.message);
     }
 }
 
@@ -369,7 +369,7 @@ async function completeTask(taskId) {
             alert('操作失败: ' + result.error);
         }
     } catch (error) {
-        alert('网络错误: ' + error.message);
+//        alert('网络错误: ' + error.message);
     }
 }
 
@@ -391,7 +391,7 @@ async function uncompleteTask(taskId) {
             alert('操作失败: ' + result.error);
         }
     } catch (error) {
-        alert('网络错误: ' + error.message);
+//        alert('网络错误: ' + error.message);
     }
 }
 
@@ -413,7 +413,7 @@ async function deleteTask(taskId) {
             alert('删除失败: ' + result.error);
         }
     } catch (error) {
-        alert('网络错误: ' + error.message);
+//        alert('网络错误: ' + error.message);
     }
 }
 
@@ -448,7 +448,7 @@ async function loadAnalytics() {
             showError('加载数据失败: ' + result.error);
         }
     } catch (error) {
-        showError('网络错误: ' + error.message);
+//        showError('网络错误: ' + error.message);
     }
 }
 
@@ -951,7 +951,6 @@ function resumeTopTimer() {
 
 function pauseTopTimer() {
     if (!topTimerRunning) {
-        // 如果已经暂停，则继续
         resumeTopTimer();
         return;
     }
